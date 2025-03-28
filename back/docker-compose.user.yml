@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  service_user:
+    image: blandskron/service-user:v1.0
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.service_user.rule=Host(`172.178.114.51`)'
+      - 'traefik.http.services.service_user.loadbalancer.server.port=8081'
+    ports:
+      - '50001:8081'
+    depends_on:
+      - db_digitus
+    volumes:
+      - 'digitus_service_user:/var/run'
+    environment:
+      TZ: 'America/Santiago'
+      SPRING_DATASOURCE_URL: 'jdbc:postgresql://db_digitus:5432/db_digitus'
+      SPRING_DATASOURCE_USERNAME: 'postgres'
+      SPRING_DATASOURCE_PASSWORD: 'D1g1tus_.2024'
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: 'org.postgresql.Driver'
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '50M'
+        max-file: '3'
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 2G
+    networks:
+      - digitus_lan
+
+networks:
+  digitus_lan:
+    external: true
+
+volumes:
+  digitus_service_user:

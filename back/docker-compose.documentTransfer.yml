@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  service_document_transfer:
+    image: blandskron/documenttransfer:v1.0
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.service_document_transfer.rule=Host(`172.178.114.51`) && PathPrefix(`/documentTransfer`)'
+      - 'traefik.http.services.service_document_transfer.loadbalancer.server.port=8083'
+    ports:
+      - '50004:8083'
+    depends_on:
+      - db_digitus
+    volumes:
+      - 'digitus_service_document_transfer:/var/run/documents'
+    environment:
+      TZ: 'America/Santiago'
+      SPRING_APPLICATION_NAME: 'documentTransfer'
+      SPRING_DATASOURCE_URL: 'jdbc:postgresql://db_digitus:5432/db_digitus'
+      SPRING_DATASOURCE_USERNAME: 'postgres'
+      SPRING_DATASOURCE_PASSWORD: 'D1g1tus_.2024'
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: 'org.postgresql.Driver'
+      SPRING_JPA_DATABASE_PLATFORM: 'org.hibernate.dialect.PostgreSQLDialect'
+      SPRING_JPA_HIBERNATE_DDL_AUTO: 'update'
+      SPRING_JPA_PROPERTIES_HIBERNATE_TYPE_JSON_SERIALIZER: 'com.fasterxml.jackson.databind.ObjectMapper'
+      SPRINGDOC_SWAGGER_UI_PATH: '/api'
+      SPRINGDOC_API_DOCS_PATH: '/api-docs'
+      SPRING_WEB_RESOURCES_ADD_MAPPINGS: 'true'
+      APP_API_LOG_EVENT_PUBLISH: '/api/events/publish/log?source=DocumentTransfer'
+      APP_API_FILE_EVENT_PUBLISH: '/api/events/publish/file/'
+      APP_BASE_URL_PUBLISH_SERVICE: 'http://172.178.114.51:4620'
+      SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE: '39MB'
+      SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE: '39MB'
+      SERVER_TOMCAT_CONNECTION_TIMEOUT: '600000ms'
+      SERVER_TOMCAT_MAX_SWALLOW_SIZE: '50MB'
+      SERVER_TOMCAT_MAX_CONNECTIONS: '10000'
+      SERVER_TOMCAT_ACCEPT_COUNT: '1000'
+      PATH_DIRECTORY: '/var/run/documents'
+      SPRING_DATASOURCE_HIKARI_MAX_LIFETIME: '1800000'
+      SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT: '600000'
+      SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT: '10000'
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: '5'
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: '20'
+      SERVER_PORT: '8083'
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '50M'
+        max-file: '3'
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 2G
+    networks:
+      - digitus_lan
+
+networks:
+  digitus_lan:
+    driver: bridge
+
+volumes:
+  digitus_service_document_transfer:

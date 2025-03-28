@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  service_document:
+    image: blandskron/document:v1.0
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.service_document.rule=Host(`172.178.114.51`) && PathPrefix(`/searchDocument`)'
+      - 'traefik.http.services.service_document.loadbalancer.server.port=8086'
+    ports:
+      - '50005:8086'
+    depends_on:
+      - db_digitus
+      - service_document_transfer
+    volumes:
+      - 'digitus_service_document_transfer:/var/run/documents'
+    environment:
+      TZ: 'America/Santiago'
+      SPRING_APPLICATION_NAME: 'document'
+      APP_ELASTICSEARCH_INDEX_NAME: 'documents_v2'
+      SPRING_ELASTICSEARCH_URIS: 'http://172.178.114.51:4624'
+      SPRING_ELASTICSEARCH_CONNECTION_TIMEOUT: '5s'
+      SPRING_ELASTICSEARCH_SOCKET_TIMEOUT: '3s'
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_DATA_ELASTICSEARCH: 'DEBUG'
+      SPRING_DATASOURCE_URL: 'jdbc:postgresql://db_digitus:5432/db_digitus'
+      SPRING_DATASOURCE_USERNAME: 'postgres'
+      SPRING_DATASOURCE_PASSWORD: 'D1g1tus_.2024'
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: 'org.postgresql.Driver'
+      SPRING_JPA_DATABASE_PLATFORM: 'org.hibernate.dialect.PostgreSQLDialect'
+      SPRING_JPA_HIBERNATE_DDL_AUTO: 'update'
+      SPRING_JPA_PROPERTIES_HIBERNATE_TYPE_JSON_SERIALIZER: 'com.fasterxml.jackson.databind.ObjectMapper'
+      SPRINGDOC_SWAGGER_UI_PATH: '/api'
+      SPRINGDOC_API_DOCS_PATH: '/api-docs'
+      SPRING_WEB_RESOURCES_ADD_MAPPINGS: 'true'
+      SERVER_PORT: '8086'
+
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 2G
+    networks:
+      - digitus_lan
+
+networks:
+  digitus_lan:
+    external: true
+
+volumes:
+  digitus_service_user:

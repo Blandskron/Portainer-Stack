@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  service_publish:
+    image: blandskron/publish:v1.0
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.service_publish.rule=Host(`172.178.114.51`) && PathPrefix(`/publishKafka`)'
+      - 'traefik.http.services.service_publish.loadbalancer.server.port=8089'
+    ports:
+      - '50008:8089'
+    depends_on:
+      - db_digitus
+      - service_kafka_data
+    environment:
+      TZ: 'America/Santiago'
+      SPRING_APPLICATION_NAME: 'publisherevenkafka'
+      SPRING_KAFKA_PRODUCER_BOOTSTRAP_SERVERS: 'service_kafka_data:4618'
+      SPRING_KAFKA_PRODUCER_KEY_SERIALIZER: 'org.apache.kafka.common.serialization.StringSerializer'
+      SPRING_KAFKA_PRODUCER_VALUE_SERIALIZER: 'org.springframework.kafka.support.serializer.JsonSerializer'
+      SPRING_KAFKA_TOPIC_DEFAULT: 'default-topic'
+      SPRINGDOC_SWAGGER_UI_PATH: '/api'
+      SPRINGDOC_API_DOCS_PATH: '/api-docs'
+      SPRING_WEB_RESOURCES_ADD_MAPPINGS: 'true'
+      SERVER_PORT: '8089'
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 2G
+    networks:
+      - digitus_lan
+
+networks:
+  digitus_lan:
+    external: true
+
+volumes:
+  digitus_service_user:

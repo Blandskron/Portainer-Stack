@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  service_consumer:
+    image: blandskron/consumer:v1.0
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.service_consumer.rule=Host(`172.178.114.51`) && PathPrefix(`/consumerKafka`)'
+      - 'traefik.http.services.service_consumer.loadbalancer.server.port=8088'
+    ports:
+      - '50007:8088'
+    depends_on:
+      - db_digitus
+      - service_kafka_data
+    environment:
+      TZ: 'America/Santiago'
+      SPRING_APPLICATION_NAME: 'consumer-kafka'
+      SPRING_THREADS_VIRTUAL_ENABLED: 'true'
+      SPRING_KAFKA_CONSUMER_BOOTSTRAP_SERVERS: 'service_kafka_data:4618'
+      SPRING_KAFKA_CONSUMER_HEARTBEAT_INTERVAL: '3000ms'
+      SPRING_KAFKA_CONSUMER_SESSION_TIMEOUT_MS: '60000'
+      SPRING_KAFKA_CONSUMER_ENABLE_AUTO_COMMIT: 'false'
+      SPRING_KAFKA_LISTENER_CONCURRENCY: '3'
+      APP_API_LOGEVENT_CREATE: '/api/logs/create'
+      APP_BASE_URL_LOGEVENT_SERVICE: 'http://172.178.114.51:50006'
+      APP_API_METADATA_EXTRACTDATA: '/api/metadata/extractdata/'
+      APP_BASE_URL_METADATA_SERVICE: 'http://172.178.114.51:4623'
+      APP_API_DOCUMENT_CREATE: '/api/documents/create/'
+      APP_BASE_URL_DOCUMENT_SERVICE: 'http://172.178.114.51:4622'
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 2G
+    networks:
+      - digitus_lan
+
+networks:
+  digitus_lan:
+    external: true
+
+volumes:
+  digitus_service_user:

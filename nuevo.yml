@@ -1,0 +1,503 @@
+version: '3.8'
+
+services:
+  db_digitus:
+    image: postgres:13
+    container_name: db_digitus
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: D1g1tus_.2024
+      POSTGRES_DB: db_digitus
+    ports:
+      - '50000:5432'
+    volumes:
+      - db_digitus_data:/var/lib/postgresql/data
+    networks:
+      - digitus_lan
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@digitus.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      TZ: America/Santiago
+    ports:
+      - '50003:80'
+    depends_on:
+      - db_digitus
+    networks:
+      - digitus_lan
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.pgadmin.rule=Host(`http://172.178.114.51/`)'
+      - 'traefik.http.services.pgadmin.loadbalancer.server.port=80'
+
+  service_user:
+    image: blandskron/service-user:v1.0
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.service_user.rule=Host(`http://172.178.114.51/`)'
+      - 'traefik.http.services.service_user.loadbalancer.server.port=8081'
+    ports:
+      - '50001:8081'
+    depends_on:
+      - db_digitus
+    volumes:
+      - 'digitus_service_user:/var/run'
+    environment:
+      TZ: 'America/Santiago'
+      SPRING_DATASOURCE_URL: 'jdbc:postgresql://db_digitus:5432/db_digitus'
+      SPRING_DATASOURCE_USERNAME: 'postgres'
+      SPRING_DATASOURCE_PASSWORD: 'D1g1tus_.2024'
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: 'org.postgresql.Driver'
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '50M'
+        max-file: '3'
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 2G
+    networks:
+      - digitus_lan
+
+  service_auth:
+    image: blandskron/service-auth:v1.2
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.service_auth.rule=Host(`http://172.178.114.51/`)'
+      - 'traefik.http.services.service_auth.loadbalancer.server.port=8082'
+    ports:
+      - '50002:8082'
+    depends_on:
+      - db_digitus
+    volumes:
+      - 'digitus_service_auth:/var/run'
+    environment:
+      TZ: 'America/Santiago'
+      SPRING_DATASOURCE_URL: 'jdbc:postgresql://db_digitus:5432/db_digitus'
+      SPRING_DATASOURCE_USERNAME: 'postgres'
+      SPRING_DATASOURCE_PASSWORD: 'D1g1tus_.2024'
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: 'org.postgresql.Driver'
+      APP_BASE_URL_USER_SERVICE: 'http://172.178.114.51:50001/'
+      APP_BASE_URL_PUBLISH_SERVICE: 'http://service_logevent:8080'
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '50M'
+        max-file: '3'
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 2G
+    networks:
+      - digitus_lan
+
+  traefik:
+    image: traefik:v2.5
+    container_name: traefik
+    restart: always
+    command:
+      - '--api.insecure=true'
+      - '--providers.docker=true'
+      - '--entrypoints.web.address=:80'
+    ports:
+      - '80:80'
+      - '8080:8080'
+    networks:
+      - digitus_lan
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  service_document_transfer:
+    image: blandskron/documenttransfer:v1.0
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.service_document_transfer.rule=Host(`172.178.114.51`) && PathPrefix(`/documentTransfer`)'
+      - 'traefik.http.services.service_document_transfer.loadbalancer.server.port=8083'
+    ports:
+      - '50004:8083'
+    depends_on:
+      - db_digitus
+    volumes:
+      - 'digitus_service_document_transfer:/var/run/documents'
+    environment:
+      TZ: 'America/Santiago'
+      SPRING_APPLICATION_NAME: 'documentTransfer'
+      SPRING_DATASOURCE_URL: 'jdbc:postgresql://db_digitus:5432/db_digitus'
+      SPRING_DATASOURCE_USERNAME: 'postgres'
+      SPRING_DATASOURCE_PASSWORD: 'D1g1tus_.2024'
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: 'org.postgresql.Driver'
+      SPRING_JPA_DATABASE_PLATFORM: 'org.hibernate.dialect.PostgreSQLDialect'
+      SPRING_JPA_HIBERNATE_DDL_AUTO: 'update'
+      SPRING_JPA_PROPERTIES_HIBERNATE_TYPE_JSON_SERIALIZER: 'com.fasterxml.jackson.databind.ObjectMapper'
+      SPRINGDOC_SWAGGER_UI_PATH: '/api'
+      SPRINGDOC_API_DOCS_PATH: '/api-docs'
+      SPRING_WEB_RESOURCES_ADD_MAPPINGS: 'true'
+      APP_API_LOG_EVENT_PUBLISH: '/api/events/publish/log?source=DocumentTransfer'
+      APP_API_FILE_EVENT_PUBLISH: '/api/events/publish/file/'
+      APP_BASE_URL_PUBLISH_SERVICE: 'http://172.16.1.235:4620'
+      SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE: '39MB'
+      SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE: '39MB'
+      SERVER_TOMCAT_CONNECTION_TIMEOUT: '600000ms'
+      SERVER_TOMCAT_MAX_SWALLOW_SIZE: '50MB'
+      SERVER_TOMCAT_MAX_CONNECTIONS: '10000'
+      SERVER_TOMCAT_ACCEPT_COUNT: '1000'
+      PATH_DIRECTORY: '/var/run/documents'
+      SPRING_DATASOURCE_HIKARI_MAX_LIFETIME: '1800000'
+      SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT: '600000'
+      SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT: '10000'
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: '5'
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: '20'
+      SERVER_PORT: '8083'
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '50M'
+        max-file: '3'
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 2G
+    networks:
+      - digitus_lan
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.2
+    container_name: elasticsearch
+    environment:
+      - node.name=elasticsearch
+      - cluster.name=es-docker-cluster
+      - cluster.initial_master_nodes=elasticsearch
+      - bootstrap.memory_lock=true
+      - 'ES_JAVA_OPTS=-Xms1g -Xmx1g'
+      - xpack.security.enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - digitus_elasticsearch:/usr/share/elasticsearch/data
+    ports:
+      - '4624:9200'
+      - '4625:9300'
+    networks:
+      - digitus_lan
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.0.0
+    container_name: kibana
+    depends_on:
+      - elasticsearch
+    ports:
+      - '4626:5601'
+    networks:
+      - digitus_lan
+
+  service_zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    ports:
+      - '4616:2181'
+    volumes:
+      - "digitus_service_zookeeper:/var/lib/zookeeper"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 4616
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - digitus_lan
+
+  service_kafka_data:
+    image: confluentinc/cp-kafka:7.5.0
+    ports:
+      - '4617:9092'
+      - '4618:9093'
+    depends_on:
+      - service_zookeeper
+    volumes:
+      - "digitus_service_kafka:/var/lib/kafka"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: service_zookeeper:4616
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:4618,EXTERNAL://0.0.0.0:4617
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://service_kafka_data:4618,EXTERNAL://localhost:4617
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LOG4J_LOGGERS: 'kafka.controller=DEBUG,kafka.producer.async.DefaultEventHandler=DEBUG,state.change.logger=DEBUG'
+    networks:
+      - digitus_lan
+
+  service_kafka_ui:
+    image: provectuslabs/kafka-ui
+    container_name: kafka-ui
+    ports:
+      - '4619:8080'
+    depends_on:
+      - service_kafka_data
+      - service_zookeeper
+    volumes:
+      - "digitus_kafka_ui:/var/lib/kafka"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAP_SERVERS: service_kafka_data:4618
+      KAFKA_CLUSTERS_0_ZOOKEEPER: service_zookeeper:4616
+    networks:
+      - digitus_lan
+
+  repository:
+    image: tomcat:latest
+    ports:
+      - "4610:8080"
+    volumes:
+      - "digitus_repository:/usr/local/tomcat"
+    environment:
+      TZ: "America/Santiago"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50M"
+        max-file: "3"
+    restart: always
+    networks:
+      - digitus_lan
+    deploy:
+      replicas: 1
+
+  webapp:
+    image: node:18-alpine
+    container_name: nextjs_web
+    working_dir: /usr/src/app
+    command: sh -c "npm install && npm run start"
+    volumes:
+      - digitus_webapp:/usr/src/app
+    ports:
+      - "4609:3000"
+    networks:
+      - digitus_lan
+
+  service_search_document:
+    image: blandskron/document:v1.0
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.service_search_document.rule=Host(`172.178.114.51`) && PathPrefix(`/searchDocument`)'
+      - 'traefik.http.services.service_search_document.loadbalancer.server.port=8086'
+    ports:
+      - '50005:8086'
+    depends_on:
+      - db_digitus
+      - service_document_transfer
+    volumes:
+      - 'digitus_service_document_transfer:/var/run/documents'
+    environment:
+      TZ: 'America/Santiago'
+      SPRING_APPLICATION_NAME: 'document'
+      APP_ELASTICSEARCH_INDEX_NAME: 'documents_v2'
+      SPRING_ELASTICSEARCH_URIS: 'http://172.178.114.51:4624'
+      SPRING_ELASTICSEARCH_CONNECTION_TIMEOUT: '5s'
+      SPRING_ELASTICSEARCH_SOCKET_TIMEOUT: '3s'
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_DATA_ELASTICSEARCH: 'DEBUG'
+      SPRING_DATASOURCE_URL: 'jdbc:postgresql://db_digitus:5432/db_digitus'
+      SPRING_DATASOURCE_USERNAME: 'postgres'
+      SPRING_DATASOURCE_PASSWORD: 'D1g1tus_.2024'
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: 'org.postgresql.Driver'
+      SPRING_JPA_DATABASE_PLATFORM: 'org.hibernate.dialect.PostgreSQLDialect'
+      SPRING_JPA_HIBERNATE_DDL_AUTO: 'update'
+      SPRING_JPA_PROPERTIES_HIBERNATE_TYPE_JSON_SERIALIZER: 'com.fasterxml.jackson.databind.ObjectMapper'
+      SPRINGDOC_SWAGGER_UI_PATH: '/api'
+      SPRINGDOC_API_DOCS_PATH: '/api-docs'
+      SPRING_WEB_RESOURCES_ADD_MAPPINGS: 'true'
+      SERVER_PORT: '8086'
+
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 2G
+    networks:
+      - digitus_lan
+
+  service_log:
+    image: blandskron/log:v1.0
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.service_log.rule=Host(`172.178.114.51`) && PathPrefix(`/logService`)'
+      - 'traefik.http.services.service_log.loadbalancer.server.port=8087'
+    ports:
+      - '50006:8087'
+    depends_on:
+      - db_digitus
+    environment:
+      TZ: 'America/Santiago'
+      SPRING_APPLICATION_NAME: 'LogService'
+      SPRING_DATASOURCE_URL: 'jdbc:postgresql://db_digitus:5432/db_digitus'
+      SPRING_DATASOURCE_USERNAME: 'postgres'
+      SPRING_DATASOURCE_PASSWORD: 'D1g1tus_.2024'
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: 'org.postgresql.Driver'
+      SPRING_JPA_DATABASE_PLATFORM: 'org.hibernate.dialect.PostgreSQLDialect'
+      SPRING_JPA_HIBERNATE_DDL_AUTO: 'update'
+      SPRING_JPA_PROPERTIES_HIBERNATE_TYPE_JSON_SERIALIZER: 'com.fasterxml.jackson.databind.ObjectMapper'
+      SPRINGDOC_SWAGGER_UI_PATH: '/api'
+      SPRINGDOC_API_DOCS_PATH: '/api-docs'
+      SPRING_WEB_RESOURCES_ADD_MAPPINGS: 'true'
+      SERVER_PORT: '8087'
+      APP_API_USER_GETUSERBYID: '/api/users/'
+      APP_BASE_URL_USER_SERVICE: 'http://172.178.114.51:50001'
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 2G
+    networks:
+      - digitus_lan
+
+  service_consumer:
+    image: blandskron/consumer:v1.0
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.service_consumer.rule=Host(`172.178.114.51`) && PathPrefix(`/consumerKafka`)'
+      - 'traefik.http.services.service_consumer.loadbalancer.server.port=8088'
+    ports:
+      - '50007:8088'
+    depends_on:
+      - db_digitus
+      - service_kafka_data
+    environment:
+      TZ: 'America/Santiago'
+      SPRING_APPLICATION_NAME: 'consumer-kafka'
+      SPRING_THREADS_VIRTUAL_ENABLED: 'true'
+      SPRING_KAFKA_CONSUMER_BOOTSTRAP_SERVERS: 'service_kafka_data:4618'
+      SPRING_KAFKA_CONSUMER_HEARTBEAT_INTERVAL: '3000ms'
+      SPRING_KAFKA_CONSUMER_SESSION_TIMEOUT_MS: '60000'
+      SPRING_KAFKA_CONSUMER_ENABLE_AUTO_COMMIT: 'false'
+      SPRING_KAFKA_LISTENER_CONCURRENCY: '3'
+      APP_API_LOGEVENT_CREATE: '/api/logs/create'
+      APP_BASE_URL_LOGEVENT_SERVICE: 'http://172.178.114.51:50006'
+      APP_API_METADATA_EXTRACTDATA: '/api/metadata/extractdata/'
+      APP_BASE_URL_METADATA_SERVICE: 'http://172.16.1.235:4623'
+      APP_API_DOCUMENT_CREATE: '/api/documents/create/'
+      APP_BASE_URL_DOCUMENT_SERVICE: 'http://172.16.1.235:4622'
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 2G
+    networks:
+      - digitus_lan
+
+  service_publish:
+    image: blandskron/publish:v1.0
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.service_publish.rule=Host(`172.178.114.51`) && PathPrefix(`/publishKafka`)'
+      - 'traefik.http.services.service_publish.loadbalancer.server.port=8089'
+    ports:
+      - '50008:8089'
+    depends_on:
+      - db_digitus
+      - service_kafka_data
+    environment:
+      TZ: 'America/Santiago'
+      SPRING_APPLICATION_NAME: 'publisherevenkafka'
+      SPRING_KAFKA_PRODUCER_BOOTSTRAP_SERVERS: 'service_kafka_data:4618'
+      SPRING_KAFKA_PRODUCER_KEY_SERIALIZER: 'org.apache.kafka.common.serialization.StringSerializer'
+      SPRING_KAFKA_PRODUCER_VALUE_SERIALIZER: 'org.springframework.kafka.support.serializer.JsonSerializer'
+      SPRING_KAFKA_TOPIC_DEFAULT: 'default-topic'
+      SPRINGDOC_SWAGGER_UI_PATH: '/api'
+      SPRINGDOC_API_DOCS_PATH: '/api-docs'
+      SPRING_WEB_RESOURCES_ADD_MAPPINGS: 'true'
+      SERVER_PORT: '8089'
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 2G
+    networks:
+      - digitus_lan
+
+  service_extract:
+    image: blandskron/extract:v1.0
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.service_extract.rule=Host(`172.178.114.51`) && PathPrefix(`/extractService`)'
+      - 'traefik.http.services.service_extract.loadbalancer.server.port=8090'
+    ports:
+      - '50009:8090'
+    depends_on:
+      - db_digitus
+    environment:
+      TZ: 'America/Santiago'
+      SPRING_APPLICATION_NAME: 'tika-extractor'
+      SPRING_THREADS_VIRTUAL_ENABLED: 'true'
+      APP_API_DOCUMENT_METADATA: '/api/documents/metadata/'
+      APP_BASE_URL_DOCUMENT_SERVICE: 'http://172.16.1.235:4622'
+      SPRINGDOC_SWAGGER_UI_PATH: '/api'
+      SPRINGDOC_API_DOCS_PATH: '/api-docs'
+      SPRING_WEB_RESOURCES_ADD_MAPPINGS: 'false'
+      SERVER_PORT: '8090'
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 2G
+    networks:
+      - digitus_lan
+
+
+networks:
+  digitus_lan:
+    driver: bridge
+
+volumes:
+  db_digitus_data:
+  digitus_service_user:
+  digitus_service_auth:
+  digitus_service_document_transfer:
+  digitus_elasticsearch:
+  digitus_service_zookeeper:
+  digitus_service_kafka:
+  digitus_kafka_ui:
+  digitus_repository:
+  digitus_webapp:
+  digitus_service_log:
+  digitus_service_consumer:
+  digitus_service_publish:
+  digitus_service_extract:

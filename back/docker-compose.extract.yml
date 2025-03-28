@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  service_extract:
+    image: blandskron/extract:v1.0
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.service_extract.rule=Host(`172.178.114.51`) && PathPrefix(`/extractService`)'
+      - 'traefik.http.services.service_extract.loadbalancer.server.port=8090'
+    ports:
+      - '50009:8090'
+    depends_on:
+      - db_digitus
+    environment:
+      TZ: 'America/Santiago'
+      SPRING_APPLICATION_NAME: 'tika-extractor'
+      SPRING_THREADS_VIRTUAL_ENABLED: 'true'
+      APP_API_DOCUMENT_METADATA: '/api/documents/metadata/'
+      APP_BASE_URL_DOCUMENT_SERVICE: 'http://172.178.114.51:4622'
+      SPRINGDOC_SWAGGER_UI_PATH: '/api'
+      SPRINGDOC_API_DOCS_PATH: '/api-docs'
+      SPRING_WEB_RESOURCES_ADD_MAPPINGS: 'false'
+      SERVER_PORT: '8090'
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 2G
+    networks:
+      - digitus_lan
+
+networks:
+  digitus_lan:
+    external: true
+
+volumes:
+  digitus_service_user:
